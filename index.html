@@ -22,10 +22,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   
-  
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  
   <style>
     :root {
       --bg-color: #000000;
@@ -600,11 +596,22 @@
     }
 
     async function loginUser(login, password) {
-      if (!supabase) throw new Error('Нет соединения с сервером');
-      const { data, error } = await supabase.from('employees').select('*').eq('login', login).eq('password', password).single();
-      if (error || !data) throw new Error('Неверный логин или пароль');
-      localStorage.setItem('ax_user', JSON.stringify(data));
-      return data;
+      const url = SUPABASE_URL + '/rest/v1/employees?select=id,login,password,full_name,role';
+      const resp = await fetch(url, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+        }
+      });
+      if (!resp.ok) throw new Error('Ошибка сервера: ' + resp.status);
+      const data = await resp.json();
+      if (!data || data.length === 0) throw new Error('Неверный логин или пароль');
+      console.log('DB users:', JSON.stringify(data));
+      console.log('Trying login:', JSON.stringify(login), 'pass:', JSON.stringify(password));
+      const user = data.find(u => u.login.toLowerCase() === login.toLowerCase() && u.password === password);
+      if (!user) throw new Error('Неверный логин или пароль');
+      localStorage.setItem('ax_user', JSON.stringify(user));
+      return user;
     }
 
     function getCurrentUser() {
@@ -800,7 +807,7 @@
         select.className = `cell-input ${shiftId ? 'cell-work' : 'cell-b'}`;
         if (window.scheduleApp) {
           const monthStr = date.slice(0, 7);
-          const idx = window.scheduleApp.scheduleData.findIndex(s => s.user_id === userId && s.date === date);
+          const idx = window.scheduleApp.scheduleData.findIndex(s => String(s.user_id) === String(userId) && s.date === date);
           if (idx >= 0) window.scheduleApp.scheduleData[idx].shift_id = shiftId;
           else window.scheduleApp.scheduleData.push({ user_id: userId, date, shift_id: shiftId });
           dataCache.schedule[monthStr] = window.scheduleApp.scheduleData;
@@ -928,6 +935,15 @@
       pBtn.onclick = (e) => { e.stopPropagation(); pMenu.style.display = pMenu.style.display === 'block' ? 'none' : 'block'; };
       document.addEventListener('click', () => pMenu.style.display = 'none');
       document.getElementById('logoutBtn').onclick = logoutUser;
+      document.getElementById('changePassBtn').onclick = () => { document.getElementById('profileMenu').style.display = 'none'; document.getElementById('modalChangePass').style.display = 'flex'; };
+      document.getElementById('btnSavePass').onclick = async () => {
+        const oldPass = document.getElementById('oldPass').value, newPass = document.getElementById('newPass').value;
+        if (!oldPass || !newPass) return alert('Заполните поля');
+        if (oldPass !== currentUser.password) return alert('Неверный старый пароль');
+        const { error } = await supabase.from('employees').update({ password: newPass }).eq('id', currentUser.id);
+        if (error) alert('Ошибка: ' + error.message);
+        else { currentUser.password = newPass; localStorage.setItem('ax_user', JSON.stringify(currentUser)); alert('Пароль изменён'); closeModal('modalChangePass'); }
+      };
       document.getElementById('themeBtn').onclick = () => { document.body.classList.toggle('light-theme'); localStorage.setItem('ax_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark'); };
       if (localStorage.getItem('ax_theme') === 'light') document.body.classList.add('light-theme');
       
@@ -985,5 +1001,3 @@
   </script>
 </body>
 </html>
-
-
